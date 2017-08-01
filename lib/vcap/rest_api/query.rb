@@ -99,11 +99,13 @@ module VCAP::RestAPI
     end
 
     def query_filter(key, comparison, val)
+      values = split_values(comparison, val)
       foreign_key_association = foreign_key_association(key)
-      values = (comparison == ' IN ') ? val.split(',') : [val]
-
       return clean_up_foreign_key(key, values, foreign_key_association) if foreign_key_association
+      query_filter_with_values(key, comparison, values)
+    end
 
+    def query_filter_with_values(key, comparison, values)
       col_type = column_type(key)
       values = values.collect { |value| cast_query_value(col_type, key, value) }.compact
 
@@ -112,6 +114,10 @@ module VCAP::RestAPI
       else
         ["#{key} #{comparison} ?", values]
       end
+    end
+
+    def split_values(comparison, val)
+      (comparison == ' IN ') ? val.split(',') : [val]
     end
 
     def cast_query_value(col_type, key, value)
