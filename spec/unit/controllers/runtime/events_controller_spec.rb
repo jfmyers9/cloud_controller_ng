@@ -143,6 +143,28 @@ module VCAP::CloudController
           expect(event.type).to eq('audit.space.delete-request')
           expect(event.actee).to eq(@space_b.guid)
         end
+
+        it 'can retrieve events for deleted organizations' do
+          get "/v2/events?q=organization_guid:#{@org_a.guid}"
+          expect(last_response.status).to(eq(200))
+          parsed_body = MultiJson.load(last_response.body)
+          before_size = parsed_body['total_results']
+
+          # Have to delete the space as well -- but this adds only one event.
+          delete "/v2/organizations/#{@org_a.guid}?recursive=true&async=false"
+          expect(last_response.status).to eq(204)
+
+          get "/v2/events?q=organization_guid:#{@org_a.guid}"
+          expect(last_response.status).to eq(200)
+          parsed_body = MultiJson.load(last_response.body)
+          after_size = parsed_body['total_results']
+          # 1 more event for the deletion.
+          expect(after_size).to eq(before_size + 1)
+
+          event = Event.last
+          expect(event.type).to eq('audit.organization.delete-request')
+          expect(event.actee).to eq(@org_a.guid)
+        end
       end
     end
   end
