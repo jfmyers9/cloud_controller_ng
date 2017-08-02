@@ -38,6 +38,13 @@ templates:
   migrate_db.sh.erb: bin/migrate_db
   seed_db.sh.erb: bin/seed_db
   uaa_ca.crt.erb: config/certs/uaa_ca.crt
+  cloud_controller_ng.yml.erb: config/bpm/cloud_controller_ng.yml
+  nginx_cc.yml.erb: config/bpm/nginx_cc.yml
+  nginx_newrelic_plugin.yml.erb: config/bpm/nginx_newrelic_plugin.yml
+  nginx_newrelic_plugin.erb: bin/nginx_newrelic_plugin
+  cloud_controller_ng.erb: bin/cloud_controller_ng
+  cloud_controller_api_worker.erb: bin/cloud_controller_api_worker
+  worker_local.yml.erb: config/bpm/worker_local.yml
 
 packages:
   - capi_utils
@@ -64,6 +71,9 @@ consumes:
   optional: true
 
 properties:
+  bpm.enabled:
+    description: "Enable Bosh Process Manager"
+    default: false
   ssl.skip_cert_verify:
     description: "specifies that the job is allowed to skip ssl cert verification"
     default: false

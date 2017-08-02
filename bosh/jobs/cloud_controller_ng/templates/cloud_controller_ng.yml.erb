@@ -1,0 +1,28 @@
+---
+executable: /var/vcap/jobs/cloud_controller_ng/bin/cloud_controller_ng
+limits:
+  memory: <%= p("cc.thresholds.api.restart_if_above_mb") %>M
+env:
+  - BUNDLE_GEMFILE=/var/vcap/packages/cloud_controller_ng/cloud_controller_ng/Gemfile
+  - HOME=/home/vcap
+  - LANG=en_US.UTF-8
+  - C_INCLUDE_PATH=/var/vcap/packages/libpq/include
+  - LIBRARY_PATH=/var/vcap/packages/libpq/lib
+  - NEWRELIC_ENABLE=<%= !!properties.cc.newrelic.license_key || p("cc.development_mode") %>
+  - NRCONFIG=/var/vcap/jobs/cloud_controller_ng/config/newrelic.yml
+  - NEW_RELIC_ENV=<%= p("cc.newrelic.environment_name") %>
+  - DYNO=<%= "#{spec.job.name}-#{spec.index}" %>
+<% if properties.env %>
+<% if properties.env.http_proxy %>
+  - HTTP_PROXY='<%= properties.env.http_proxy %>'
+  - http_proxy='<%= properties.env.http_proxy %>'
+<% end %>
+<% if properties.env.https_proxy %>
+  - HTTPS_PROXY='<%= properties.env.https_proxy %>'
+  - https_proxy='<%= properties.env.https_proxy %>'
+<% end %>
+<% if properties.env.no_proxy %>
+  - NO_PROXY='<%= properties.env.no_proxy %>'
+  - no_proxy='<%= properties.env.no_proxy %>'
+<% end %>
+<% end %>

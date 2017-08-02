@@ -1,5 +1,15 @@
 #!/usr/bin/env bash
 
+<% if p("bpm.enabled") %>
+for i in {1..<%=p("cc.jobs.local.number_of_workers")%>}; do
+  /var/vcap/packages/bpm/bin/bpm stop cloud_controller_ng -p worker_local_${i} -c /var/vcap/jobs/cloud_controller_ng/config/bpm/worker_local.yml 1>&2
+done
+
+/var/vcap/packages/bpm/bin/bpm/ stop cloud_controller_ng 1>&2
+
+echo "0"
+exit 0
+<% else %>
 RUN_DIR="/var/vcap/sys/run/cloud_controller_ng"
 JOB_DIR="/var/vcap/jobs/cloud_controller_ng"
 
@@ -14,3 +24,4 @@ for i in {1..<%=p("cc.jobs.local.number_of_workers")%>}; do
 done
 
 exec "${JOB_DIR}/bin/cc-drain"
+<% end %>

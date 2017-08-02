@@ -4,7 +4,7 @@ name: cloud_controller_worker
 description: "Cloud Controller worker processes background tasks submitted via the."
 
 templates:
-  cloud_controller_worker.yml.erb: config/cloud_controller_ng.yml
+  cloud_controller_ng.yml.erb: config/cloud_controller_ng.yml
   cloud_controller_worker_ctl.erb: bin/cloud_controller_worker_ctl
   setup_local_blobstore.sh.erb: bin/setup_local_blobstore.sh
   newrelic.yml.erb: config/newrelic.yml
@@ -22,6 +22,8 @@ templates:
   mutual_tls.crt.erb: config/certs/mutual_tls.crt
   mutual_tls.key.erb: config/certs/mutual_tls.key
   uaa_ca.crt.erb: config/certs/uaa_ca.crt
+  cloud_controller_worker.yml.erb: config/bpm/cloud_controller_worker.yml
+  cloud_controller_worker.erb: bin/cloud_controller_worker
 
 packages:
   - capi_utils
@@ -38,6 +40,9 @@ consumes:
   optional: true
 
 properties:
+  bpm.enabled:
+    description: "Enable Bosh Process Manager"
+    default: false
   ssl.skip_cert_verify:
     description: "specifies that the job is allowed to skip ssl cert verification"
     default: false

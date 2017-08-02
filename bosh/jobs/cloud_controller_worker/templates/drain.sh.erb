@@ -1,5 +1,18 @@
 #!/usr/bin/env bash
 
+<% if p("bpm.enabled") %>
+
+<% (1..(p("cc.jobs.generic.number_of_workers"))).each do |index| %>
+  /var/vcap/packages/bpm/bin/bpm stop cloud_controller_worker \
+    -p worker_<%= index %> \
+    -c /var/vcap/jobs/cloud_controller_worker/config/bpm/cloud_controller_worker.yml \
+    1>&2 || true
+<% end %>
+echo "0"
+exit 0
+
+<% else %>
+
 RUN_DIR="/var/vcap/sys/run/cloud_controller_worker"
 source /var/vcap/packages/capi_utils/pid_utils.sh
 

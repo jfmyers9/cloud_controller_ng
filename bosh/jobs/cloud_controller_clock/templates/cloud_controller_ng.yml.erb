@@ -1,7 +1,6 @@
 <%
-  require 'cgi'
   require 'uri'
-
+  
   def discover_external_ip
     networks = spec.networks.marshal_dump
 
@@ -22,22 +21,14 @@
 %>
 ---
 #Actually NGX host and port
-<% if p('cc.nginx.ip').empty? %>
 local_route: <%= discover_external_ip %>
-<% else %>
-local_route: <%= p('cc.nginx.ip') %>
-<% end %>
 external_port: <%= p("cc.external_port") %>
 tls_port: <%= p("cc.tls_port") %>
 internal_service_hostname: <%= p("cc.internal_service_hostname") %>
 
-<% if p("bpm.enabled") %>
-pid_filename: /var/vcap/data/cloud_controller_ng/cloud_controller_ng.pid
-<% else %>
-pid_filename: /var/vcap/sys/run/cloud_controller_ng/cloud_controller_ng.pid
-<% end %>
-newrelic_enabled: <%= !!properties.cc.newrelic.license_key || p("cc.development_mode") %>
-development_mode: <%= p("cc.development_mode") %>
+pid_filename: /var/vcap/sys/run/cloud_controller_clock/cloud_controller_clock.pid
+newrelic_enabled: false
+development_mode: false
 
 external_protocol: <%= p("cc.external_protocol") %>
 external_domain: <%= p("cc.external_host") %>.<%= p("system_domain") %>
@@ -49,13 +40,9 @@ app_domains:
   if domain.is_a?(Hash)
     domain
   else
-    { 'name' => domain }
+    { name: domain }
   end
 }.to_yaml.gsub("---", "") %>
-
-<% if_p("cc.reserved_private_domains") do |reserved| %>
-reserved_private_domains: <%= reserved %>
-<% end %>
 
 jobs:
   global:
@@ -92,6 +79,10 @@ jobs:
   droplet_upload:
     timeout_in_seconds: <%= timeout %>
   <% end %>
+  <% if_p("cc.jobs.diego_sync.timeout_in_seconds") do |timeout| %>
+  diego_sync:
+    timeout_in_seconds: <%= timeout %>
+  <% end %>
 
 app_events:
   cutoff_age_in_days: <%= p("cc.app_events.cutoff_age_in_days") %>
@@ -110,6 +101,17 @@ failed_jobs:
 
 completed_tasks:
   cutoff_age_in_days: <%= p("cc.completed_tasks.cutoff_age_in_days") %>
+
+pending_droplets:
+  frequency_in_seconds: <%= p("cc.pending_droplets.frequency_in_seconds") %>
+  expiration_in_seconds: <%= p("cc.staging_timeout_in_seconds") %>
+
+pending_builds:
+  frequency_in_seconds: <%= p("cc.pending_builds.frequency_in_seconds") %>
+  expiration_in_seconds: <%= p("cc.staging_timeout_in_seconds") %>
+
+diego_sync:
+  frequency_in_seconds: <%= p("cc.diego_sync.frequency_in_seconds") %>
 
 default_app_memory: <%= p("cc.default_app_memory") %>
 default_app_disk_in_mb: <%= p("cc.default_app_disk_in_mb") %>
@@ -131,16 +133,10 @@ internal_api:
 
 nginx:
   use_nginx: true
-  <% if p("bpm.enabled") %>
-  instance_socket: "/var/vcap/data/cloud_controller_ng/cloud_controller.sock"
-  <% else %>
-  instance_socket: "/var/vcap/sys/run/cloud_controller_ng/cloud_controller.sock"
-  <% end %>
+  instance_socket: "/var/vcap/sys/run/cloud_controller_clock/cloud_controller.sock"
 
 index: <%= spec.index %>
 name: <%= name %>
-route_services_enabled: <%= !p("router.route_services_secret").empty? %>
-volume_services_enabled: <%= p("cc.volume_services_enabled") %>
 
 info:
   name: "<%= p("name") %>"
@@ -148,25 +144,6 @@ info:
   version: <%= p("version") %>
   support_address: "<%= p("support_address") %>"
   description: "<%= p("description") %>"
-<% if_p("cc.allow_app_ssh_access") do %>
-  app_ssh_endpoint: <%= "ssh." + p("system_domain") + ":" + p("app_ssh.port").to_s %>
-<% if_p("app_ssh.host_key_fingerprint") do |fingerprint| %>
-  app_ssh_host_key_fingerprint: <%= fingerprint %>
-<% end %>
-  app_ssh_oauth_client: <%= p("app_ssh.oauth_client_id") %>
-<% end %>
-<% if_p("cc.min_cli_version") do |min_cli_version| %>
-  min_cli_version: <%= min_cli_version %>
-<% end %>
-<% if_p("cc.min_recommended_cli_version") do |min_recommended_cli_version| %>
-  min_recommended_cli_version: <%= min_recommended_cli_version %>
-<% end %>
-<% if_p("cc.info.custom") do |custom| %>
-  custom:
-  <% custom.each do |key, value| %>
-    <%= key %>: <%= value %>
-  <% end %>
-<% end %>
 
 <% if_p("cc.directories") do %>
 directories:<% p("cc.directories").each do |key, value| %>
@@ -174,7 +151,7 @@ directories:<% p("cc.directories").each do |key, value| %>
 <% end %>
 
 logging:
-  file: /var/vcap/sys/log/cloud_controller_ng/cloud_controller_ng.log
+  file: /var/vcap/sys/log/cloud_controller_clock/cloud_controller_clock.log
   syslog: vcap.cloud_controller_ng
   level: <%= p("cc.logging_level") %>
   max_retries: <%= p("cc.logging_max_retries") %>
@@ -182,7 +159,6 @@ logging:
 <% if_p("metron_endpoint.host", "metron_endpoint.port") do |host, port| %>
 loggregator:
   router: <%= host %>:<%= port %>
-  internal_url: <%= p("cc.loggregator.internal_url") %>
 <% end %>
 
 doppler:
@@ -215,21 +191,14 @@ uaa:
   url: <%= p("uaa.url", "#{scheme}://uaa.#{system_domain}") %>
   internal_url: <%= "https://#{p("cc.uaa.internal_url")}:#{p("uaa.ssl.port")}" %>
   resource_id: <%= p("cc.uaa_resource_id") %>
+  ca_file: /var/vcap/jobs/cloud_controller_clock/config/certs/uaa_ca.crt
   <% if_p("uaa.cc.token_secret") do |token_secret| %>
   symmetric_secret: "<%= token_secret %>"
   <% end %>
-  ca_file: /var/vcap/jobs/cloud_controller_ng/config/certs/uaa_ca.crt
 
 hm9000:
   url: <%= p("hm9000.url", "https://hm9000.#{system_domain}") %>
   internal_url: <%= "http://hm9000.service.cf.internal:#{p('hm9000.port')}" %>
-
-<% if p("routing_api.enabled") %>
-routing_api:
-  url: <%= "https://api.#{system_domain}/routing" %>
-  routing_client_name: "cc_routing"
-  routing_client_secret: <%= p("uaa.clients.cc_routing.secret") %>
-<% end %>
 
 # App staging parameters
 staging:
@@ -244,8 +213,8 @@ staging:
 default_health_check_timeout: <%= p("cc.default_health_check_timeout") %>
 maximum_health_check_timeout: <%= p("cc.maximum_health_check_timeout") %>
 
-runtimes_file: /var/vcap/jobs/cloud_controller_ng/config/runtimes.yml
-stacks_file: /var/vcap/jobs/cloud_controller_ng/config/stacks.yml
+runtimes_file: /var/vcap/jobs/cloud_controller_clock/config/runtimes.yml
+stacks_file: /var/vcap/jobs/cloud_controller_clock/config/stacks.yml
 
 shared_isolation_segment_name: <%= p("cc.shared_isolation_segment_name") %>
 
@@ -257,6 +226,8 @@ quota_definitions:
 
 default_quota_definition: <%= p("cc.default_quota_definition") %>
 
+# TODO: we believe these blobstore properties are not used by the clock, but our Config parser requires these properties
+# Story: https://www.pivotaltracker.com/story/show/136759317
 resource_pool:
   blobstore_type: <%= p("cc.resource_pool.blobstore_type") %>
   webdav_config:
@@ -266,7 +237,7 @@ resource_pool:
     username: <%= p("cc.resource_pool.webdav_config.username") %>
     password: <%= p("cc.resource_pool.webdav_config.password") %>
     <% if p("cc.resource_pool.webdav_config.ca_cert") != "" && p("cc.resource_pool.webdav_config.ca_cert") != nil %>
-    ca_cert_path: "/var/vcap/jobs/cloud_controller_ng/config/certs/resource_pool_ca_cert.pem"
+    ca_cert_path: "/var/vcap/jobs/cloud_controller_clock/config/certs/resource_pool_ca_cert.pem"
     <% end %>
   minimum_size: <%= p("cc.resource_pool.minimum_size") %>
   maximum_size: <%= p("cc.resource_pool.maximum_size") %>
@@ -289,10 +260,9 @@ packages:
     username: <%= p("cc.packages.webdav_config.username") %>
     password: <%= p("cc.packages.webdav_config.password") %>
     <% if p("cc.packages.webdav_config.ca_cert") != "" && p("cc.packages.webdav_config.ca_cert") != nil %>
-    ca_cert_path: "/var/vcap/jobs/cloud_controller_ng/config/certs/packages_ca_cert.pem"
+    ca_cert_path: "/var/vcap/jobs/cloud_controller_clock/config/certs/packages_ca_cert.pem"
     <% end %>
   app_package_directory_key: <%= p("cc.packages.app_package_directory_key") %>
-  max_valid_packages_stored: <%= p("cc.packages.max_valid_packages_stored") %>
   max_package_size: <%= p("cc.packages.max_package_size") %>
   <% if_p("cc.packages.cdn") do %>
   cdn:
@@ -312,7 +282,7 @@ droplets:
     username: <%= p("cc.droplets.webdav_config.username") %>
     password: <%= p("cc.droplets.webdav_config.password") %>
     <% if p("cc.droplets.webdav_config.ca_cert") != "" && p("cc.droplets.webdav_config.ca_cert") != nil %>
-    ca_cert_path: "/var/vcap/jobs/cloud_controller_ng/config/certs/droplets_ca_cert.pem"
+    ca_cert_path: "/var/vcap/jobs/cloud_controller_clock/config/certs/droplets_ca_cert.pem"
     <% end %>
   droplet_directory_key: <%= p("cc.droplets.droplet_directory_key") %>
   <% if_p("cc.droplets.cdn") do %>
@@ -323,7 +293,6 @@ droplets:
   <% end %>
   fog_connection: <%= p("cc.droplets.fog_connection", {}).to_json %>
   fog_aws_storage_options: <%= p("cc.droplets.fog_aws_storage_options", {}).to_json %>
-  max_staged_droplets_stored: <%= p("cc.droplets.max_staged_droplets_stored") %>
 
 buildpacks:
   blobstore_type: <%= p("cc.buildpacks.blobstore_type") %>
@@ -334,7 +303,7 @@ buildpacks:
     username: <%= p("cc.buildpacks.webdav_config.username") %>
     password: <%= p("cc.buildpacks.webdav_config.password") %>
     <% if p("cc.buildpacks.webdav_config.ca_cert") != "" && p("cc.buildpacks.webdav_config.ca_cert") != nil %>
-    ca_cert_path: "/var/vcap/jobs/cloud_controller_ng/config/certs/buildpacks_ca_cert.pem"
+    ca_cert_path: "/var/vcap/jobs/cloud_controller_clock/config/certs/buildpacks_ca_cert.pem"
     <% end %>
   buildpack_directory_key: <%= p("cc.buildpacks.buildpack_directory_key") %>
   <% if_p("cc.buildpacks.cdn") do %>
@@ -353,8 +322,6 @@ flapping_crash_count_threshold: <%= p("cc.flapping_crash_count_threshold") %>
 disable_custom_buildpacks: <%= p("cc.disable_custom_buildpacks") %>
 
 broker_client_timeout_seconds: <%= p("cc.broker_client_timeout_seconds") %>
-broker_client_default_async_poll_interval_seconds: <%= p('cc.broker_client_default_async_poll_interval_seconds') %>
-broker_client_max_async_poll_duration_minutes: <%= p('cc.broker_client_max_async_poll_duration_minutes') %>
 
 renderer:
   max_results_per_page: <%= p("cc.renderer.max_results_per_page") %>
@@ -371,46 +338,18 @@ uaa_client_secret: <%= p("uaa.clients.cc-service-dashboards.secret") %>
 uaa_client_scope: <%= p("uaa.clients.cc-service-dashboards.scope") %>
 <% end %>
 
-cloud_controller_username_lookup_client_name: "cloud_controller_username_lookup"
-cloud_controller_username_lookup_client_secret: <%= p("uaa.clients.cloud_controller_username_lookup.secret") %>
-
 users_can_select_backend: <%= p("cc.users_can_select_backend") %>
 allow_app_ssh_access: <%= p("cc.allow_app_ssh_access") %>
-default_app_ssh_access: <%= p("cc.default_app_ssh_access") %>
 
 <% if_p("ssl.skip_cert_verify") do |skip_cert_verify|%>
 skip_cert_verify: <%= skip_cert_verify %>
 <% end %>
-
-install_buildpacks: <%= p("cc.install_buildpacks", []).to_yaml.gsub("---", "") %>
 
 app_bits_upload_grace_period_in_seconds: <%= p("cc.app_bits_upload_grace_period_in_seconds") %>
 
 security_group_definitions: <%= p("cc.security_group_definitions").to_json %>
 default_running_security_groups: <%= p("cc.default_running_security_groups").to_json %>
 default_staging_security_groups: <%= p("cc.default_staging_security_groups").to_json %>
-
-<% if_p("cc.feature_disabled_message") do %>
-feature_disabled_message: <%= p("cc.feature_disabled_message") %>
-<% end %>
-
-allowed_cors_domains: <%= p("cc.allowed_cors_domains").to_json %>
-
-placement_top_stager_percentage: <%= p("cc.placement_top_stager_percentage") %>
-minimum_candidate_stagers: <%= p("cc.minimum_candidate_stagers") %>
-
-statsd_host: <%= p("cc.statsd_host") %>
-statsd_port: <%= p("cc.statsd_port") %>
-
-<% if p("cc.dea_use_https") %>
-dea_client:
-  key_file: /var/vcap/jobs/cloud_controller_ng/config/certs/dea_client.key
-  cert_file: /var/vcap/jobs/cloud_controller_ng/config/certs/dea_client.crt
-  ca_file: /var/vcap/jobs/cloud_controller_ng/config/certs/dea_ca.crt
-<% end %>
-
-security_event_logging:
-  enabled: <%= p("cc.security_event_logging.enabled") %>
 
 system_hostnames: <%= p("cc.system_hostnames") %>
 
@@ -423,45 +362,7 @@ bits_service:
   password: <%= p("cc.bits_service.password") %>
   <% end %>
 
-rate_limiter:
-  enabled: <%= p("cc.rate_limiter.enabled") %>
-  general_limit: <%= p("cc.rate_limiter.general_limit") %>
-  unauthenticated_limit: <%= p("cc.rate_limiter.unauthenticated_limit") %>
-  reset_interval_in_minutes: <%= p("cc.rate_limiter.reset_interval_in_minutes") %>
-
-<%
-use_mtls = p("cc.diego.temporary_cc_uploader_mtls")
-
-cc_uploader_url = nil
-if_link("cc_uploader") do |cc_uploader|
-  if use_mtls
-    cc_uploader_url = "https://#{cc_uploader.p("internal_hostname")}:#{cc_uploader.p("https_port")}"
-  else
-    cc_uploader_url = "http://#{cc_uploader.p("internal_hostname")}:#{cc_uploader.p("http_port")}"
-  end
-end.else do
-  if use_mtls
-    cc_uploader_url = p("cc.diego.cc_uploader_https_url")
-  else
-    cc_uploader_url = p("cc.diego.cc_uploader_url")
-  end
-end
-%>
-
 diego:
-  bbs:
-    url: <%= p("cc.diego.bbs.url") %>
-    key_file: /var/vcap/jobs/cloud_controller_ng/config/certs/mutual_tls.key
-    cert_file: /var/vcap/jobs/cloud_controller_ng/config/certs/mutual_tls.crt
-    ca_file: /var/vcap/jobs/cloud_controller_ng/config/certs/mutual_tls_ca.crt
-  cc_uploader_url: <%= cc_uploader_url %>
-  docker_staging_stack: <%= p("cc.diego.docker_staging_stack") %>
-  file_server_url: <%= p("cc.diego.file_server_url") %>
-  insecure_docker_registry_list: <%= p("cc.diego.insecure_docker_registry_list") %>
-  lifecycle_bundles: <%= p("cc.diego.lifecycle_bundles").to_json %>
-  nsync_url: <%= p("cc.diego.nsync_url") %>
-  pid_limit: <%= p("cc.diego.pid_limit") %>
-  stager_url: <%= p("cc.diego.stager_url") %>
   temporary_local_staging: <%= p("cc.diego.temporary_local_staging") %>
   temporary_local_tasks: <%= p("cc.diego.temporary_local_tasks") %>
   temporary_local_apps: <%= p("cc.diego.temporary_local_apps") %>
@@ -472,6 +373,24 @@ diego:
   <% if_p("cc.diego.temporary_oci_buildpack_mode") do |value| %>
   temporary_oci_buildpack_mode: <%= value %>
   <% end %>
+  nsync_url: <%= p("cc.diego.nsync_url") %>
+  stager_url: <%= p("cc.diego.stager_url") %>
   tps_url: <%= p("cc.diego.tps_url") %>
+  file_server_url: <%= p("cc.diego.file_server_url") %>
+  cc_uploader_url: <%= p("cc.diego.cc_uploader_url") %>
   use_privileged_containers_for_running: <%= p("cc.diego.use_privileged_containers_for_running") %>
   use_privileged_containers_for_staging: <%= p("cc.diego.use_privileged_containers_for_staging") %>
+  lifecycle_bundles: <%= p("cc.diego.lifecycle_bundles").to_json %>
+  bbs:
+    url: <%= p("cc.diego.bbs.url") %>
+    key_file: /var/vcap/jobs/cloud_controller_clock/config/certs/mutual_tls.key
+    cert_file: /var/vcap/jobs/cloud_controller_clock/config/certs/mutual_tls.crt
+    ca_file: /var/vcap/jobs/cloud_controller_clock/config/certs/mutual_tls_ca.crt
+  pid_limit: <%= p("cc.diego.pid_limit") %>
+
+<% if p("routing_api.enabled") %>
+routing_api:
+  url: <%= "https://api.#{system_domain}/routing" %>
+  routing_client_name: "cc_routing"
+  routing_client_secret: <%= p("uaa.clients.cc_routing.secret") %>
+<% end %>

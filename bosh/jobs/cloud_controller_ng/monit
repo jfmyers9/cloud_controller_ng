@@ -18,6 +18,46 @@
   end
 %>
 
+<% if p("bpm.enabled") %>
+check process cloud_controller_ng
+  with pidfile /var/vcap/sys/run/bpm/cloud_controller_ng/cloud_controller_ng.pid
+  start program "/var/vcap/packages/bpm/bin/bpm start cloud_controller_ng"
+  stop program "/var/vcap/packages/bpm/bin/bpm stop cloud_controller_ng"
+  group vcap
+<% if p('cc.nginx.ip').empty? %>
+  if failed host <%= discover_external_ip %> port <%= p("cc.external_port") %> protocol http
+<% else %>
+  if failed host <%= p('cc.nginx.ip') %> port <%= p("cc.external_port") %> protocol http
+<% end %>
+      and request '/v2/info'
+      with timeout 60 seconds for 5 cycles
+  then restart
+
+check process nginx_cc
+  with pidfile /var/vcap/sys/run/bpm/cloud_controller_ng/nginx_cc.pid
+  start program "/var/vcap/packages/bpm/bin/bpm start cloud_controller_ng -p nginx_cc"
+  stop program "/var/vcap/packages/bpm/bin/bpm stop cloud_controller_ng -p nginx_cc"
+  depends on cloud_controller_ng
+  group vcap
+
+<% if_p("cc.newrelic.license_key") do %>
+check process nginx_newrelic_plugin
+  with pidfile /var/vcap/sys/run/bpm/cloud_controller_ng/nginx_newrelic_plugin.pid
+  start program "/var/vcap/packages/bpm/bin/bpm start cloud_controller_ng -p nginx_newrelic_plugin"
+  stop program "/var/vcap/packages/bpm/bin/bpm stop cloud_controller_ng -p nginx_newrelic_plugin"
+  group vcap
+<% end %>
+
+<% (1..(p("cc.jobs.local.number_of_workers"))).each do |index| %>
+check process cloud_controller_worker_local_<%= index %>
+  with pidfile /var/vcap/sys/run/bpm/cloud_controller_ng/worker_local_<%= index %>.pid
+  start program "/var/vcap/packages/bpm/bin/bpm start cloud_controller_ng -p worker_local_<%= index %> -c /var/vcap/jobs/cloud_controller_ng/config/bpm/worker_local.yml"
+  stop program "/var/vcap/packages/bpm/bin/bpm stop cloud_controller_ng -p worker_local_<%= index %> -c /var/vcap/jobs/cloud_controller_ng/config/bpm/worker_local.yml"
+  group vcap
+<% end %>
+
+<% else %>
+
 check process cloud_controller_ng
   with pidfile /var/vcap/sys/run/cloud_controller_ng/cloud_controller_ng.pid
   start program "/var/vcap/jobs/cloud_controller_ng/bin/cloud_controller_ng_ctl start"
@@ -37,19 +77,6 @@ check process cloud_controller_ng
       with timeout 60 seconds for 5 cycles
   then restart
 
-<% (1..(p("cc.jobs.local.number_of_workers"))).each do |index| %>
-check process cloud_controller_worker_local_<%= index %>
-  with pidfile /var/vcap/sys/run/cloud_controller_ng/cloud_controller_worker_<%= index %>.pid
-  start program "/var/vcap/jobs/cloud_controller_ng/bin/cloud_controller_worker_ctl start <%= index %>"
-        as uid vcap and gid vcap
-  stop program "/var/vcap/jobs/cloud_controller_ng/bin/cloud_controller_worker_ctl stop <%= index %>"
-        as uid vcap and gid vcap
-  group vcap
-  if totalmem > <%= p("cc.thresholds.api.alert_if_above_mb") %> Mb for 3 cycles then alert
-  if totalmem > <%= p("cc.thresholds.api.restart_if_consistently_above_mb") %> Mb for 15 cycles then restart
-  if totalmem > <%= p("cc.thresholds.api.restart_if_above_mb") %> Mb for 3 cycles then restart
-<% end %>
-
 check process nginx_cc
   with pidfile /var/vcap/sys/run/nginx_cc/nginx.pid
   start program "/var/vcap/jobs/cloud_controller_ng/bin/nginx_ctl start"
@@ -68,3 +95,18 @@ check process nginx_newrelic_plugin
       as uid vcap and gid vcap
   group vcap
 <% end %>
+
+<% (1..(p("cc.jobs.local.number_of_workers"))).each do |index| %>
+check process cloud_controller_worker_local_<%= index %>
+  with pidfile /var/vcap/sys/run/cloud_controller_ng/cloud_controller_worker_<%= index %>.pid
+  start program "/var/vcap/jobs/cloud_controller_ng/bin/cloud_controller_worker_ctl start <%= index %>"
+        as uid vcap and gid vcap
+  stop program "/var/vcap/jobs/cloud_controller_ng/bin/cloud_controller_worker_ctl stop <%= index %>"
+        as uid vcap and gid vcap
+  group vcap
+  if totalmem > <%= p("cc.thresholds.api.alert_if_above_mb") %> Mb for 3 cycles then alert
+  if totalmem > <%= p("cc.thresholds.api.restart_if_consistently_above_mb") %> Mb for 15 cycles then restart
+  if totalmem > <%= p("cc.thresholds.api.restart_if_above_mb") %> Mb for 3 cycles then restart
+<% end %>
+<% end %>
+

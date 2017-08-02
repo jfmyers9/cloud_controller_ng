@@ -1,3 +1,12 @@
+<% if p("bpm.enabled") %>
+<% (1..(p("cc.jobs.generic.number_of_workers"))).each do |index| %>
+check process cloud_controller_worker_<%= index %>
+  with pidfile /var/vcap/sys/run/bpm/cloud_controller_worker/worker_<%= index %>.pid
+  start program "/var/vcap/packages/bpm/bin/bpm start cloud_controller_worker -p worker_<%= index %> -c /var/vcap/jobs/cloud_controller_worker/config/bpm/cloud_controller_worker.yml"
+  stop program "/var/vcap/packages/bpm/bin/bpm stop cloud_controller_worker -p worker_<%= index %> -c /var/vcap/jobs/cloud_controller_worker/config/bpm/cloud_controller_worker.yml"
+  group vcap
+<% end %>
+<% else %>
 <% (1..(p("cc.jobs.generic.number_of_workers"))).each do |index| %>
 check process cloud_controller_worker_<%= index %>
   with pidfile /var/vcap/sys/run/cloud_controller_worker/cloud_controller_worker_<%= index %>.pid
@@ -11,4 +20,4 @@ check process cloud_controller_worker_<%= index %>
   if totalmem > <%= p("cc.thresholds.worker.restart_if_consistently_above_mb") %> Mb for 15 cycles then restart
   if totalmem > <%= p("cc.thresholds.worker.restart_if_above_mb") %> Mb for 3 cycles then restart
 <% end %>
-
+<% end %>
